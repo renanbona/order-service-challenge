@@ -13,6 +13,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -20,7 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "orders")
+@Table(name = "orders", uniqueConstraints = @UniqueConstraint(columnNames = {"customer_id", "idempotency_key"}))
 public class Order {
 
     @Id
@@ -47,6 +48,14 @@ public class Order {
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderItem> items = new ArrayList<>();
 
+    /** Client-generated Idempotency-Key, unique per customer. Null when the client sent none. */
+    @Column(name = "idempotency_key", length = 255)
+    private String idempotencyKey;
+
+    /** Hash of the request that created this order, used to detect a reused key with a different payload. */
+    @Column(name = "request_fingerprint", length = 64)
+    private String requestFingerprint;
+
     protected Order() {
     }
 
@@ -54,6 +63,22 @@ public class Order {
         this.customerId = customerId;
         this.status = OrderStatus.CREATED;
         this.createdAt = Instant.now();
+    }
+
+    public String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    public void setIdempotencyKey(String idempotencyKey) {
+        this.idempotencyKey = idempotencyKey;
+    }
+
+    public String getRequestFingerprint() {
+        return requestFingerprint;
+    }
+
+    public void setRequestFingerprint(String requestFingerprint) {
+        this.requestFingerprint = requestFingerprint;
     }
 
     public void addItem(OrderItem item) {

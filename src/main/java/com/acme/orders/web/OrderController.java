@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -27,8 +28,10 @@ public class OrderController {
     }
 
     @PostMapping("/orders")
-    public ResponseEntity<OrderResponse> create(@Valid @RequestBody CreateOrderRequest request) {
-        Order order = orderService.create(request);
+    public ResponseEntity<OrderResponse> create(
+            @Valid @RequestBody CreateOrderRequest request,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey) {
+        Order order = orderService.create(request, idempotencyKey);
         return ResponseEntity
                 .created(URI.create("/orders/" + order.getId()))
                 .body(OrderResponse.from(order));
