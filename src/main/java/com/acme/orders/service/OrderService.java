@@ -74,6 +74,7 @@ public class OrderService {
         return orderRepository.findByCustomerIdOrderByCreatedAtDesc(customerId);
     }
 
+    @Transactional
     public Order cancel(Long id) {
         Order order = get(id);
         if (order.getStatus() == OrderStatus.CANCELLED) {
@@ -89,8 +90,11 @@ public class OrderService {
         return order;
     }
 
-    @Transactional
-    public void restoreStock(Order order) {
+    /**
+     * Private and called from within {@link #cancel(Long)}: it runs inside cancel's transaction.
+     * (A @Transactional here would be ignored, since self-invocation bypasses the Spring proxy.)
+     */
+    private void restoreStock(Order order) {
         for (OrderItem item : order.getItems()) {
             Product product = item.getProduct();
             product.setStock(product.getStock() + item.getQuantity());
