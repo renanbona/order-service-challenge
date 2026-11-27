@@ -170,11 +170,7 @@
         <label class="field">
           <span>Coupon (couponCode)</span>
           <input id="order-coupon" class="w-md mono" type="text" list="coupon-codes" autocomplete="off" spellcheck="false">
-          <datalist id="coupon-codes">
-            <option value="WELCOME10"></option>
-            <option value="LASTDAY15"></option>
-            <option value="EXPIRED20"></option>
-          </datalist>
+          <datalist id="coupon-codes"></datalist>
         </label>
 
         <div class="row">
@@ -187,6 +183,53 @@
       </div>
     </section>
   </div>
+
+  <section aria-labelledby="coupons-title">
+    <h2 id="coupons-title">Coupons</h2>
+    <div class="grid-2">
+      <div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Code</th>
+                <th scope="col" class="num">Off</th>
+                <th scope="col">Applies to</th>
+                <th scope="col">Expires</th>
+              </tr>
+            </thead>
+            <tbody id="coupons-body"></tbody>
+          </table>
+        </div>
+        <div class="msg" id="coupons-list-msg" role="status"></div>
+      </div>
+
+      <div class="stack">
+        <label class="field">
+          <span>Code</span>
+          <input id="coupon-code" class="w-md mono" type="text" autocomplete="off" spellcheck="false">
+        </label>
+        <label class="field">
+          <span>Percent off (1–100)</span>
+          <input id="coupon-percent" class="w-sm" type="text" inputmode="numeric" autocomplete="off">
+        </label>
+        <label class="field">
+          <span>Expires on</span>
+          <input id="coupon-expires" class="w-md" type="date">
+        </label>
+        <label class="field">
+          <span>Applies to</span>
+          <select id="coupon-scope" class="w-md">
+            <option value="">Whole purchase</option>
+          </select>
+        </label>
+        <div class="row">
+          <button type="button" class="primary" id="create-coupon">Create coupon</button>
+        </div>
+        <div class="msg" id="coupons-msg" role="status"></div>
+      </div>
+    </div>
+  </section>
 
   <section aria-labelledby="customer-orders-title">
     <h2 id="customer-orders-title">Customer orders</h2>
@@ -422,7 +465,19 @@ function loadProducts() {
     clear(tbody);
     res.data.forEach(function (p) { tbody.appendChild(productRow(p)); });
     renderKnownProducts(res.data);
+    renderCouponScopes(res.data);
   });
+}
+
+function renderCouponScopes(products) {
+  var select = $('coupon-scope');
+  var current = select.value;
+  clear(select);
+  select.appendChild(el('option', { value: '', text: 'Whole purchase' }));
+  products.forEach(function (p) {
+    select.appendChild(el('option', { value: String(p.id), text: 'Product ' + show(p.id) + ' — ' + show(p.sku) }));
+  });
+  select.value = current;
 }
 
 function productRow(p) {
@@ -682,7 +737,64 @@ function cancelOrder(id, btn, msgNode) {
 /* ---------- refresh ---------- */
 
 function afterMutation() {
-  return Promise.all([loadProducts(), loadCustomerOrders(), loadSingleOrder()]);
+  return Promise.all([loadProducts(), loadCoupons(), loadCustomerOrders(), loadSingleOrder()]);
+}
+
+/* ---------- Coupons ---------- */
+
+function loadCoupons() {
+  return api('GET', '/coupons').then(function (res) {
+    if (!res.ok || !Array.isArray(res.data)) {
+      setMsg('coupons-list-msg', errorText(res), 'err');
+      return;
+    }
+    setMsg('coupons-list-msg', '');
+    renderCoupons(res.data);
+  });
+}
+
+function renderCoupons(coupons) {
+  var tbody = $('coupons-body');
+  clear(tbody);
+  coupons.forEach(function (c) {
+    tbody.appendChild(el('tr', null,
+      el('td', { className: 'mono', text: show(c.code) }),
+      el('td', { className: 'num', text: show(c.percentOff) + '%' }),
+      el('td', { text: c.productId === null ? 'Whole purchase' : 'Product ' + show(c.productSku) }),
+      el('td', { className: 'mono', text: show(c.expiresAt) })
+    ));
+  });
+
+  // Suggestions for the coupon field of the new order form.
+  var list = $('coupon-codes');
+  clear(list);
+  coupons.forEach(function (c) { list.appendChild(el('option', { value: show(c.code) })); });
+}
+
+function createCoupon() {
+  var btn = $('create-coupon');
+  var scope = $('coupon-scope').value;
+  var body = {
+    code: $('coupon-code').value,
+    percentOff: raw($('coupon-percent').value),
+    expiresAt: $('coupon-expires').value || null,
+    productId: scope === '' ? null : raw(scope)
+  };
+  btn.disabled = true;
+  api('POST', '/coupons', body)
+    .then(function (res) {
+      if (res.ok) {
+        setMsg('coupons-msg', 'HTTP ' + res.status + ' — coupon ' + show(res.data && res.data.code) + ' created.', 'ok');
+        $('coupon-code').value = '';
+        $('coupon-percent').value = '';
+        $('coupon-expires').value = '';
+        $('coupon-scope').value = '';
+      } else {
+        setMsg('coupons-msg', errorText(res), 'err');
+      }
+      return loadCoupons();
+    })
+    .then(function () { btn.disabled = false; });
 }
 
 function refreshAll() {
@@ -697,6 +809,7 @@ $('refresh-all').addEventListener('click', refreshAll);
 $('add-item').addEventListener('click', function () { addItemRow('', ''); });
 $('create-order').addEventListener('click', createOrder);
 $('create-retry').addEventListener('click', createWithRetry);
+$('create-coupon').addEventListener('click', createCoupon);
 
 $('lookup-customer-btn').addEventListener('click', function () {
   state.customerShown = $('lookup-customer').value;
@@ -724,6 +837,7 @@ $('clear-log').addEventListener('click', function () {
 addItemRow('2', '2');
 state.customerShown = $('lookup-customer').value;
 loadProducts();
+loadCoupons();
 loadCustomerOrders();
 </script>
 </body>

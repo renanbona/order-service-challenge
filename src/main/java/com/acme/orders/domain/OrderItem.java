@@ -45,7 +45,7 @@ public class OrderItem {
     }
 
     public BigDecimal lineTotal() {
-        return product.getPrice().multiply(BigDecimal.valueOf(quantity));
+        return unitPrice.multiply(BigDecimal.valueOf(quantity));
     }
 
     public Long getId() {

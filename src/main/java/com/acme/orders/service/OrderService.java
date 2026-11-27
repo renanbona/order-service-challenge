@@ -53,11 +53,15 @@ public class OrderService {
         }
 
         if (request.couponCode() != null && !request.couponCode().isBlank()) {
-            Coupon coupon = couponRepository.findByCode(request.couponCode())
-                    .orElseThrow(() -> new NotFoundException("Coupon not found: " + request.couponCode()));
+            String code = Coupon.normalizeCode(request.couponCode());
+            Coupon coupon = couponRepository.findByCode(code)
+                    .orElseThrow(() -> new NotFoundException("Coupon not found: " + code));
             pricingService.validate(coupon);
+            if (!pricingService.appliesTo(order, coupon)) {
+                throw new BusinessException("Coupon " + code + " does not apply to any product in this order");
+            }
             order.setCoupon(coupon);
-            order.setDiscount(pricingService.discountFor(order.subtotal(), coupon));
+            order.setDiscount(pricingService.discountFor(order, coupon));
         }
 
         Order saved = orderRepository.save(order);
